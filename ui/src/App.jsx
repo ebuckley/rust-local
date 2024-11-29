@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
-import syncEngine, { useItems, useSyncEngine } from './sync-engine'
-import './App.css'
+import { useState } from 'react'
+import  { useItems, useSyncEngine } from './sync-engine'
 
 function App() {
   const {items: todos, createItem, updateItem, deleteItem} = useItems('Todo');
@@ -9,9 +8,6 @@ function App() {
   if (loading) {
     return <div>Loading...</div>;
   }
-
-
-  
 
   // Create new todo
   const handleSubmit = async (e) => {
