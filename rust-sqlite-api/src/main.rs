@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_files::Files;
 use rusqlite::{Connection, Result, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -221,18 +222,22 @@ async fn get_bootstrap(
     }
 }
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let database_path = std::env::args().nth(1).unwrap_or("sync.db".to_string());
-
-    let db = web::Data::new(Database::new(&database_path).expect("Failed to create database"));
-
+    let db = web::Data::new(Database::new("windsurf.db").unwrap());
+    
     HttpServer::new(move || {
         App::new()
             .app_data(db.clone())
-            .route("/transactions", web::post().to(post_transactions))
-            .route("/transactions", web::get().to(get_transactions))
-            .route("/bootstrap", web::get().to(get_bootstrap))
+            // API routes with /api prefix
+            .service(
+                web::scope("/api")
+                    .route("/transactions", web::post().to(post_transactions))
+                    .route("/transactions", web::get().to(get_transactions))
+                    .route("/bootstrap", web::get().to(get_bootstrap))
+            )
+            // Serve static files from the UI build directory
+            .service(Files::new("/", "../ui/dist").index_file("index.html"))
     })
     .bind("127.0.0.1:8080")?
     .run()
@@ -262,7 +267,7 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .app_data(db.clone())
-                .route("/transactions", web::post().to(post_transactions))
+                .route("/api/transactions", web::post().to(post_transactions))
         ).await;
 
         let transaction = Transaction {
@@ -276,7 +281,7 @@ mod tests {
         };
 
         let req = test::TestRequest::post()
-            .uri("/transactions")
+            .uri("/api/transactions")
             .set_json(vec![transaction])
             .to_request();
 
@@ -291,8 +296,8 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .app_data(db.clone())
-                .route("/transactions", web::post().to(post_transactions))
-                .route("/transactions", web::get().to(get_transactions))
+                .route("/api/transactions", web::post().to(post_transactions))
+                .route("/api/transactions", web::get().to(get_transactions))
         ).await;
 
         // First create a transaction
@@ -307,7 +312,7 @@ mod tests {
         };
 
         let create_req = test::TestRequest::post()
-            .uri("/transactions")
+            .uri("/api/transactions")
             .set_json(vec![transaction.clone()])
             .to_request();
 
@@ -315,7 +320,7 @@ mod tests {
         
         // Then fetch transactions
         let get_req = test::TestRequest::get()
-            .uri(&format!("/transactions?from=0&to={}", create_resp.sync_id))
+            .uri(&format!("/api/transactions?from=0&to={}", create_resp.sync_id))
             .to_request();
 
         let get_resp: TransactionsResponse = test::call_and_read_body_json(&app, get_req).await;
@@ -331,8 +336,8 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .app_data(db.clone())
-                .route("/transactions", web::post().to(post_transactions))
-                .route("/bootstrap", web::get().to(get_bootstrap))
+                .route("/api/transactions", web::post().to(post_transactions))
+                .route("/api/bootstrap", web::get().to(get_bootstrap))
         ).await;
 
         // Create multiple transactions
@@ -358,7 +363,7 @@ mod tests {
         ];
 
         let create_req = test::TestRequest::post()
-            .uri("/transactions")
+            .uri("/api/transactions")
             .set_json(transactions)
             .to_request();
 
@@ -366,7 +371,7 @@ mod tests {
         
         // Get bootstrap data
         let bootstrap_req = test::TestRequest::get()
-            .uri("/bootstrap")
+            .uri("/api/bootstrap")
             .to_request();
 
         let bootstrap_resp: BootstrapResponse = test::call_and_read_body_json(&app, bootstrap_req).await;
@@ -383,8 +388,8 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .app_data(db.clone())
-                .route("/transactions", web::post().to(post_transactions))
-                .route("/bootstrap", web::get().to(get_bootstrap))
+                .route("/api/transactions", web::post().to(post_transactions))
+                .route("/api/bootstrap", web::get().to(get_bootstrap))
         ).await;
 
         let todo_id = Uuid::new_v4().to_string();
@@ -401,7 +406,7 @@ mod tests {
         };
 
         let create_req = test::TestRequest::post()
-            .uri("/transactions")
+            .uri("/api/transactions")
             .set_json(vec![create_transaction])
             .to_request();
 
@@ -419,7 +424,7 @@ mod tests {
         };
 
         let update_req = test::TestRequest::post()
-            .uri("/transactions")
+            .uri("/api/transactions")
             .set_json(vec![update_transaction])
             .to_request();
 
@@ -434,7 +439,7 @@ mod tests {
         };
 
         let delete_req = test::TestRequest::post()
-            .uri("/transactions")
+            .uri("/api/transactions")
             .set_json(vec![delete_transaction])
             .to_request();
 
@@ -442,7 +447,7 @@ mod tests {
 
         // Verify final state
         let bootstrap_req = test::TestRequest::get()
-            .uri("/bootstrap")
+            .uri("/api/bootstrap")
             .to_request();
 
         let bootstrap_resp: BootstrapResponse = test::call_and_read_body_json(&app, bootstrap_req).await;
