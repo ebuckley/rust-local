@@ -1,5 +1,5 @@
 # Build stage for Rust
-FROM rust:1.70-slim-bullseye as rust-builder
+FROM rust:1.77-slim-bullseye as rust-builder
 WORKDIR /usr/src/app
 
 # Install build dependencies
