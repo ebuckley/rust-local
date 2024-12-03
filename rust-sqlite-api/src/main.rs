@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Mutex;
 use chrono::Utc;
+use log::{info, warn};
+use actix_web::middleware::Logger;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Transaction {
@@ -224,24 +226,32 @@ async fn get_bootstrap(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let db = web::Data::new(Database::new("windsurf.db").unwrap());
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     
-    HttpServer::new(move || {
+    let db_path = std::env::var("DATABASE_PATH").unwrap_or_else(|_| "windsurf.db".to_string());
+    let ui_path = std::env::var("UI_PATH").unwrap_or_else(|_| "../ui/dist".to_string());
+    
+    info!("Starting server with database at: {}", db_path);
+    info!("UI path set to: {}", ui_path);
+    
+    let db = web::Data::new(Database::new(&db_path).unwrap());
+    
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(db.clone())
-            // API routes with /api prefix
+            .wrap(Logger::new("%a '%r' %s %b '%{Referer}i' '%{User-Agent}i' %T"))
             .service(
                 web::scope("/api")
                     .route("/transactions", web::post().to(post_transactions))
                     .route("/transactions", web::get().to(get_transactions))
                     .route("/bootstrap", web::get().to(get_bootstrap))
             )
-            // Serve static files from the UI build directory
-            .service(Files::new("/", "../ui/dist").index_file("index.html"))
+            .service(Files::new("/", &ui_path).index_file("index.html"))
     })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    .bind("0.0.0.0:8080")?;
+    
+    info!("Server starting on http://0.0.0.0:8080");
+    server.run().await
 }
 
 #[cfg(test)]
